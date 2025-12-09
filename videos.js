@@ -65,19 +65,25 @@
     const vid = VR360.panelVideos[panelIndex];
     if (!vid) return;
 
+    // Remover URL antigo
     if (vid.dataset.url) {
-      URL.revokeObjectURL(vid.dataset.url);
+        URL.revokeObjectURL(vid.dataset.url);
     }
 
     const url = URL.createObjectURL(file);
-
     vid.src = url;
     vid.dataset.url = url;
+
+    // AQUI ESTÁ A MUDANÇA: só aplica material depois do vídeo ter frame válido
+    vid.onloadeddata = () => {
+        const panelEntity = planes[panelIndex];
+        panelEntity.setAttribute("material", "src", `#${vid.id}`);
+
+        // Se estiver tocando, inicia
+        if (state.isPlaying) vid.play();
+    };
+
     vid.load();
-
-    planes[panelIndex].setAttribute("material", "src", `#${vid.id}`);
-
-    if (state.isPlaying) vid.play();
   }
 
   // ------------------------------------------------------
