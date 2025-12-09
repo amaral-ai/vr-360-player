@@ -1,22 +1,19 @@
-
 // =========================
 // vr.js
 // =========================
 /**
- * vr.js
- * - Controle de áudio: apenas o painel mais central à visão reproduz som (desmute).
+ * - Controle de áudio: apenas o painel mais central à visão reproduz som.
  * - Zoom vertical (ajuste de FOV da câmera).
  * - Integração com giroscópio: usa rotação da câmera A-Frame.
- * - Modo VR é fornecido pelo próprio A-Frame (WebXR); basta usar o botão de VR.
+ * - Modo VR é fornecido pelo próprio A-Frame (WebXR).
  */
 
 (function () {
-  const VR360 = window.VR360 || {};
+  const VR360 = (window.VR360 = window.VR360 || {});
   const PANEL_COUNT = 6;
 
   // Guarda referência à câmera
   let cameraEl = null;
-
   function getCameraEl() {
     if (!cameraEl) {
       cameraEl = document.querySelector("#camera");
@@ -30,7 +27,8 @@
   AFRAME.registerComponent("audio-focus-manager", {
     init: function () {
       this.cameraEl = getCameraEl();
-      this.panelAngles = [0, 60, 120, 180, 240, 300]; // direções centrais dos painéis
+      // Ângulos centrais correspondentes a cada painel (0,60,...,300 graus)
+      this.panelAngles = [0, 60, 120, 180, 240, 300];
       this.currentPanelIndex = null;
       this.panelVideos = VR360.panelVideos || [];
 
@@ -50,7 +48,7 @@
       // Normaliza 0–360
       yaw = ((yaw % 360) + 360) % 360;
 
-      // Descobre painel cujo ângulo central é o mais próximo
+      // Descobre o painel cujo ângulo central é o mais próximo
       let bestIndex = 0;
       let bestDiff = 999;
 
@@ -74,19 +72,22 @@
     },
 
     updateAudioFocus: function () {
+      const state = VR360.state || { isPlaying: false };
+
+      this.panelVideos = VR360.panelVideos || [];
       this.panelVideos.forEach((videoEl, idx) => {
         if (!videoEl) return;
+
         // Som apenas no painel mais central
         videoEl.muted = idx !== this.currentPanelIndex;
-        if (idx === this.currentPanelIndex) {
-          // Garante que o vídeo central esteja tocando (se global estiver em "Play")
-          if (VR360.state && VR360.state.isPlaying && videoEl.paused) {
-            videoEl
-              .play()
-              .catch((err) =>
-                console.warn("Erro ao tocar vídeo do painel central:", err)
-              );
-          }
+
+        // Garante que o vídeo central esteja tocando se o global estiver em "Play"
+        if (idx === this.currentPanelIndex && state.isPlaying && videoEl.paused) {
+          videoEl
+            .play()
+            .catch((err) =>
+              console.warn("Erro ao tocar vídeo do painel central:", err)
+            );
         }
       });
     },
@@ -130,10 +131,8 @@
   });
 
   // =========================
-  // Integração extra / helpers gerais
+  // Helper opcional: entrar no modo VR via código
   // =========================
-
-  // Opcional: expor método auxiliar para entrar no modo VR via código, se quiser
   VR360.enterVR = function () {
     const scene = document.querySelector("a-scene");
     if (scene && scene.enterVR) {
@@ -143,4 +142,3 @@
 
   window.VR360 = VR360;
 })();
-

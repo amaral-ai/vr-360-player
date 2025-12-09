@@ -1,231 +1,144 @@
-
 // =========================
-// videos.js
+// vr.js
 // =========================
 /**
- * videos.js
- * - Gerencia seleção de pasta, randomizador e carregamento dos vídeos.
- * - Cada painel recebe um vídeo aleatório da pasta.
- * - Quando um vídeo termina, outro aleatório ocupa o painel.
- * - Integra com VR (play/pause global, etc.) via objeto global window.VR360.
+ * - Controle de áudio: apenas o painel mais central à visão reproduz som.
+ * - Zoom vertical (ajuste de FOV da câmera).
+ * - Integração com giroscópio: usa rotação da câmera A-Frame.
+ * - Modo VR é fornecido pelo próprio A-Frame (WebXR).
  */
 
-window.VR360 = window.VR360 || {};
-
 (function () {
-  const state = {
-    videoFiles: [],
-    currentPlayIndexByPanel: new Array(6).fill(null),
-    isPlaying: false,
-    lastFolderLabel: null,
+  const VR360 = (window.VR360 = window.VR360 || {});
+  const PANEL_COUNT = 6;
+
+  // Guarda referência à câmera
+  let cameraEl = null;
+  function getCameraEl() {
+    if (!cameraEl) {
+      cameraEl = document.querySelector("#camera");
+    }
+    return cameraEl;
+  }
+
+  // =========================
+  // Componente A-Frame: audio-focus-manager
+  // =========================
+  AFRAME.registerComponent("audio-focus-manager", {
+    init: function () {
+      this.cameraEl = getCameraEl();
+      // Ângulos centrais correspondentes a cada painel (0,60,...,300 graus)
+      this.panelAngles = [0, 60, 120, 180, 240, 300];
+      this.currentPanelIndex = null;
+      this.panelVideos = VR360.panelVideos || [];
+
+      // Por padrão, todos mute (somente o mais central será desmutado)
+      this.panelVideos.forEach((v) => {
+        if (v) v.muted = true;
+      });
+    },
+
+    tick: function () {
+      if (!this.cameraEl || !this.panelVideos.length) return;
+
+      const rot = this.cameraEl.getAttribute("rotation");
+      if (!rot) return;
+
+      let yaw = rot.y || 0; // graus
+      // Normaliza 0–360
+      yaw = ((yaw % 360) + 360) % 360;
+
+      // Descobre o painel cujo ângulo central é o mais próximo
+      let bestIndex = 0;
+      let bestDiff = 999;
+
+      for (let i = 0; i < this.panelAngles.length; i++) {
+        const panelAngle = this.panelAngles[i];
+
+        // Distância angular mínima (modo 360)
+        let diff = ((yaw - panelAngle + 540) % 360) - 180;
+        diff = Math.abs(diff);
+
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestIndex = i;
+        }
+      }
+
+      if (bestIndex !== this.currentPanelIndex) {
+        this.currentPanelIndex = bestIndex;
+        this.updateAudioFocus();
+      }
+    },
+
+    updateAudioFocus: function () {
+      const state = VR360.state || { isPlaying: false };
+
+      this.panelVideos = VR360.panelVideos || [];
+      this.panelVideos.forEach((videoEl, idx) => {
+        if (!videoEl) return;
+
+        // Som apenas no painel mais central
+        videoEl.muted = idx !== this.currentPanelIndex;
+
+        // Garante que o vídeo central esteja tocando se o global estiver em "Play"
+        if (idx === this.currentPanelIndex && state.isPlaying && videoEl.paused) {
+          videoEl
+            .play()
+            .catch((err) =>
+              console.warn("Erro ao tocar vídeo do painel central:", err)
+            );
+        }
+      });
+    },
+  });
+
+  // =========================
+  // Componente A-Frame: vr-zoom-controls
+  // =========================
+  AFRAME.registerComponent("vr-zoom-controls", {
+    init: function () {
+      this.cameraEl = getCameraEl();
+      this.minFov = 40; // mais "zoom in"
+      this.maxFov = 100; // mais "zoom out"
+      this.currentFov = 80;
+
+      const zoomInBtn = document.getElementById("zoomInBtn");
+      const zoomOutBtn = document.getElementById("zoomOutBtn");
+
+      if (zoomInBtn) {
+        zoomInBtn.addEventListener("click", () => {
+          this.adjustFov(-5);
+        });
+      }
+
+      if (zoomOutBtn) {
+        zoomOutBtn.addEventListener("click", () => {
+          this.adjustFov(5);
+        });
+      }
+    },
+
+    adjustFov: function (delta) {
+      if (!this.cameraEl) return;
+
+      this.currentFov = this.currentFov + delta;
+      if (this.currentFov < this.minFov) this.currentFov = this.minFov;
+      if (this.currentFov > this.maxFov) this.currentFov = this.maxFov;
+
+      this.cameraEl.setAttribute("camera", "fov", this.currentFov);
+    },
+  });
+
+  // =========================
+  // Helper opcional: entrar no modo VR via código
+  // =========================
+  VR360.enterVR = function () {
+    const scene = document.querySelector("a-scene");
+    if (scene && scene.enterVR) {
+      scene.enterVR();
+    }
   };
 
-  const folderInput = document.getElementById("folderInput");
-  const folderLabel = document.getElementById("folderLabel");
-  const statusEl = document.getElementById("status");
-  const playPauseBtn = document.getElementById("playPauseBtn");
-  const reloadBtn = document.getElementById("reloadBtn");
-
-  const PANEL_COUNT = 6;
-  const PANEL_VIDEO_IDS = Array.from({ length: PANEL_COUNT }).map(
-    (_, i) => `panel-video-${i}`
-  );
-
-  const panelVideos = PANEL_VIDEO_IDS.map((id) =>
-    document.getElementById(id)
-  );
-
-  // Expor no namespace global para outros scripts (vr.js)
-  window.VR360.panelVideos = panelVideos;
-  window.VR360.state = state;
-
-  // Utilitário: embaralhar array (Fisher-Yates)
-  function shuffleArray(arr) {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  }
-
-  // Atualiza texto de status
-  function setStatus(msg) {
-    if (statusEl) statusEl.textContent = msg;
-  }
-
-  // Seleciona um arquivo aleatório
-  function getRandomFileIndex() {
-    if (!state.videoFiles.length) return null;
-    const idx = Math.floor(Math.random() * state.videoFiles.length);
-    return idx;
-  }
-
-  // Associa um vídeo aleatório a um painel específico
-  function assignRandomVideoToPanel(panelIndex) {
-    const fileIndex = getRandomFileIndex();
-    if (fileIndex === null) {
-      console.warn("Nenhum arquivo de vídeo para atribuir.");
-      return;
-    }
-
-    const file = state.videoFiles[fileIndex];
-    const videoEl = panelVideos[panelIndex];
-    if (!videoEl) return;
-
-    // Limpa src anterior
-    try {
-      videoEl.pause();
-    } catch (e) {}
-
-    // Cria URL temporário para o arquivo
-    const objectUrl = URL.createObjectURL(file);
-    videoEl.src = objectUrl;
-    videoEl.load();
-
-    // Marca qual índice está tocando neste painel
-    state.currentPlayIndexByPanel[panelIndex] = fileIndex;
-
-    // Se experiência estiver em modo "Play", já inicia o vídeo
-    if (state.isPlaying) {
-      // Para mobile, garantir play depois de toque do usuário
-      videoEl
-        .play()
-        .catch((err) => console.warn("Erro ao dar play no painel", panelIndex, err));
-    }
-  }
-
-  // Carrega 6 vídeos aleatórios
-  function assignInitialVideos() {
-    if (!state.videoFiles.length) {
-      setStatus("Nenhum vídeo válido encontrado na pasta.");
-      return;
-    }
-
-    shuffleArray(state.videoFiles);
-
-    for (let i = 0; i < PANEL_COUNT; i++) {
-      assignRandomVideoToPanel(i);
-    }
-
-    setStatus(
-      `Carregados ${Math.min(
-        PANEL_COUNT,
-        state.videoFiles.length
-      )} painéis a partir de ${
-        state.videoFiles.length
-      } vídeos na pasta selecionada.`
-    );
-  }
-
-  // Handler de término de vídeo: carrega outro aleatório no mesmo painel
-  function setupEndedHandlers() {
-    panelVideos.forEach((videoEl, index) => {
-      videoEl.addEventListener("ended", () => {
-        assignRandomVideoToPanel(index);
-      });
-    });
-  }
-
-  // Play/Pause global da experiência
-  function setGlobalPlayState(shouldPlay) {
-    state.isPlaying = shouldPlay;
-
-    panelVideos.forEach((videoEl) => {
-      if (!videoEl.src) return;
-
-      if (shouldPlay) {
-        videoEl
-          .play()
-          .catch((err) =>
-            console.warn("Erro ao dar play global em um vídeo:", err)
-          );
-      } else {
-        try {
-          videoEl.pause();
-        } catch (e) {}
-      }
-    });
-
-    playPauseBtn.textContent = shouldPlay ? "Pause" : "Play";
-  }
-
-  // Tratamento da seleção de pasta (via <input webkitdirectory>)
-  function handleFolderSelection(evt) {
-    const files = Array.from(evt.target.files || []);
-    const videoFiles = files.filter((f) =>
-      f.type.startsWith("video/")
-    );
-
-    if (!videoFiles.length) {
-      setStatus("Nenhum arquivo de vídeo encontrado na pasta.");
-      state.videoFiles = [];
-      return;
-    }
-
-    state.videoFiles = videoFiles;
-    state.lastFolderLabel = extractFolderNameFromFiles(videoFiles);
-    if (state.lastFolderLabel) {
-      folderLabel.textContent = `Pasta: ${state.lastFolderLabel} (trocar)`;
-    }
-
-    assignInitialVideos();
-  }
-
-  // "Nome" aproximado da pasta, a partir do primeiro arquivo
-  function extractFolderNameFromFiles(videoFiles) {
-    if (!videoFiles.length) return null;
-
-    const first = videoFiles[0];
-    if (!first.webkitRelativePath) return null;
-
-    const parts = first.webkitRelativePath.split("/");
-    if (parts.length <= 1) return null;
-
-    return parts[0] || null;
-  }
-
-  // Recarregar pasta: reusar mesma seleção (o navegador devolve os mesmos arquivos)
-  // Na prática, o usuário pode precisar selecionar novamente se o navegador não mantiver a lista.
-  function reloadCurrentFolder() {
-    if (!state.videoFiles.length) {
-      setStatus("Nenhuma pasta para recarregar. Selecione uma pasta primeiro.");
-      return;
-    }
-
-    // Apenas refaz atribuição inicial (mantendo lista já carregada)
-    assignInitialVideos();
-  }
-
-  // Eventos de UI
-  if (folderLabel && folderInput) {
-    folderLabel.addEventListener("click", () => {
-      folderInput.click();
-    });
-  }
-
-  if (folderInput) {
-    folderInput.addEventListener("change", handleFolderSelection);
-  }
-
-  if (playPauseBtn) {
-    playPauseBtn.addEventListener("click", () => {
-      setGlobalPlayState(!state.isPlaying);
-    });
-  }
-
-  if (reloadBtn) {
-    reloadBtn.addEventListener("click", () => {
-      reloadCurrentFolder();
-    });
-  }
-
-  // Expor função de play/pause global para outros scripts (por segurança)
-  window.VR360.setGlobalPlayState = setGlobalPlayState;
-
-  // Instala listeners de "ended" logo no carregamento
-  setupEndedHandlers();
-
-  // Status inicial
-  setStatus("Selecione uma pasta com vídeos (até 6 serão exibidos ao mesmo tempo).");
+  window.VR360 = VR360;
 })();
-
