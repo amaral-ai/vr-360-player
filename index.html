@@ -1,0 +1,246 @@
+// =========================
+// index.html
+// =========================
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>VR 360 Video Player - Hex Ring</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- A-Frame (WebVR/WebXR + 3D) -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        color: #fff;
+      }
+
+      #ui-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 8px 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        z-index: 10;
+        background: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0.9),
+          rgba(0, 0, 0, 0)
+        );
+      }
+
+      #ui-overlay button,
+      #ui-overlay label {
+        font-size: 12px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        padding: 4px 7px;
+      }
+
+      #ui-overlay button:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      #folderInput {
+        display: none;
+      }
+
+      #status {
+        font-size: 11px;
+        opacity: 0.8;
+        margin-left: auto;
+        text-align: right;
+        max-width: 40%;
+      }
+
+      /* Vídeos base usados como textura (não precisam aparecer na tela) */
+      #video-buffers {
+        position: fixed;
+        left: -9999px;
+        top: -9999px;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
+
+      .vr-video {
+        width: 1280px;
+        height: 720px;
+        object-fit: cover; /* "corta" para evitar bordas pretas, na medida do possível */
+      }
+    </style>
+  </head>
+  <body>
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+      <label for="folderInput" id="folderLabel">Selecionar pasta de vídeos</label>
+      <input
+        id="folderInput"
+        type="file"
+        webkitdirectory
+        multiple
+        accept="video/*"
+      />
+
+      <button id="playPauseBtn">Play</button>
+      <button id="zoomInBtn">Zoom +</button>
+      <button id="zoomOutBtn">Zoom -</button>
+      <button id="reloadBtn">Recarregar pasta</button>
+
+      <div id="status">Nenhuma pasta selecionada ainda.</div>
+    </div>
+
+    <!-- Buffers de vídeo (fontes para as texturas A-Frame) -->
+    <div id="video-buffers">
+      <video
+        id="panel-video-0"
+        class="vr-video"
+        playsinline
+        webkit-playsinline
+        muted
+      ></video>
+      <video
+        id="panel-video-1"
+        class="vr-video"
+        playsinline
+        webkit-playsinline
+        muted
+      ></video>
+      <video
+        id="panel-video-2"
+        class="vr-video"
+        playsinline
+        webkit-playsinline
+        muted
+      ></video>
+      <video
+        id="panel-video-3"
+        class="vr-video"
+        playsinline
+        webkit-playsinline
+        muted
+      ></video>
+      <video
+        id="panel-video-4"
+        class="vr-video"
+        playsinline
+        webkit-playsinline
+        muted
+      ></video>
+      <video
+        id="panel-video-5"
+        class="vr-video"
+        playsinline
+        webkit-playsinline
+        muted
+      ></video>
+    </div>
+
+    <!-- Cena A-Frame -->
+    <a-scene
+      renderer="colorManagement: true; antialias: true;"
+      embedded
+      audio-focus-manager
+      vr-zoom-controls
+    >
+      <!-- Luz ambiente leve, só para evitar escuridão total caso tenha geometria extra -->
+      <a-entity light="type: ambient; intensity: 0.6; color: #ffffff"></a-entity>
+
+      <!-- Câmera + look-controls (giroscópio em mobile) -->
+      <a-entity
+        id="rig"
+        position="0 1.6 0"
+      >
+        <a-entity
+          id="camera"
+          camera="fov: 80"
+          look-controls="magicWindowTrackingEnabled: true; touchEnabled: true; mouseEnabled: true;"
+          position="0 0 0"
+        ></a-entity>
+      </a-entity>
+
+      <!-- Seis painéis em anel hexagonal ao redor do usuário -->
+      <!-- Raio ~4, altura ~1.6, largura 6, altura 3.375 (16:9) -->
+      <!-- Centro 0° -->
+      <a-plane
+        id="panel-0"
+        position="0 1.6 -4"
+        rotation="0 0 0"
+        width="6"
+        height="3.375"
+        material="src: #panel-video-0; side: double;"
+      ></a-plane>
+
+      <!-- ~60° -->
+      <a-plane
+        id="panel-1"
+        position="3.464 1.6 -2"
+        rotation="0 -60 0"
+        width="6"
+        height="3.375"
+        material="src: #panel-video-1; side: double;"
+      ></a-plane>
+
+      <!-- ~120° -->
+      <a-plane
+        id="panel-2"
+        position="3.464 1.6 2"
+        rotation="0 -120 0"
+        width="6"
+        height="3.375"
+        material="src: #panel-video-2; side: double;"
+      ></a-plane>
+
+      <!-- ~180° -->
+      <a-plane
+        id="panel-3"
+        position="0 1.6 4"
+        rotation="0 180 0"
+        width="6"
+        height="3.375"
+        material="src: #panel-video-3; side: double;"
+      ></a-plane>
+
+      <!-- ~240° -->
+      <a-plane
+        id="panel-4"
+        position="-3.464 1.6 2"
+        rotation="0 120 0"
+        width="6"
+        height="3.375"
+        material="src: #panel-video-4; side: double;"
+      ></a-plane>
+
+      <!-- ~300° -->
+      <a-plane
+        id="panel-5"
+        position="-3.464 1.6 -2"
+        rotation="0 60 0"
+        width="6"
+        height="3.375"
+        material="src: #panel-video-5; side: double;"
+      ></a-plane>
+    </a-scene>
+
+    <!-- Scripts do app -->
+    <script src="videos.js"></script>
+    <script src="vr.js"></script>
+  </body>
+</html>
+
+
