@@ -1,90 +1,96 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
-  <meta charset="UTF-8" />
-  <title>VR 360 Player</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VR 360 Player</title>
 
-  <!-- A-Frame -->
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-  <!-- CSS simples -->
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: white;
-    }
-    #ui {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      z-index: 9999;
-      background: rgba(0,0,0,0.4);
-      padding: 12px;
-      border-radius: 6px;
-    }
-    .hidden-video {
-      display: none;
-    }
-  </style>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            background: black;
+            overflow: hidden;
+        }
+
+        #selectFolderBtn,
+        #playBtn,
+        #pauseBtn {
+            position: absolute;
+            z-index: 9999;
+            top: 10px;
+            padding: 6px 12px;
+            background: #222;
+            color: white;
+            border: 1px solid #555;
+            cursor: pointer;
+        }
+
+        #selectFolderBtn { left: 10px; }
+        #playBtn        { left: 160px; }
+        #pauseBtn       { left: 230px; }
+
+        #info {
+            position: absolute;
+            top: 50px;
+            left: 10px;
+            z-index: 9999;
+            font-size: 14px;
+            color: white;
+        }
+
+        video { display: none; }
+    </style>
 </head>
+
 <body>
 
-<div id="ui">
-  <div>
-    <label>Selecionar pasta de vídeos:</label>
-    <input type="file" id="folderInput" webkitdirectory multiple />
-  </div>
-  <div style="margin-top:10px;">
-    <button id="playPauseBtn" disabled>Play</button>
-    <button id="reloadBtn" disabled>Recarregar</button>
-  </div>
-  <div id="status" style="margin-top:10px;">Nenhuma pasta selecionada.</div>
-</div>
+    <button id="selectFolderBtn">Selecionar Pasta</button>
+    <button id="playBtn">Play</button>
+    <button id="pauseBtn">Pause</button>
 
-<!-- Cena VR -->
-<a-scene vr-mode-ui="enabled: true" device-orientation-permission-ui="enabled: true">
+    <div id="info">Nenhuma pasta selecionada.</div>
 
-  <a-assets id="assets"></a-assets>
+    <!-- 🔥 VIDEOS REAIS (6 instâncias independentes) -->
+    <video id="video0" playsinline webkit-playsinline crossorigin="anonymous"></video>
+    <video id="video1" playsinline webkit-playsinline crossorigin="anonymous"></video>
+    <video id="video2" playsinline webkit-playsinline crossorigin="anonymous"></video>
+    <video id="video3" playsinline webkit-playsinline crossorigin="anonymous"></video>
+    <video id="video4" playsinline webkit-playsinline crossorigin="anonymous"></video>
+    <video id="video5" playsinline webkit-playsinline crossorigin="anonymous"></video>
 
-  <!-- Câmera -->
-  <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
+    <a-scene renderer="clearColor: #000000" vr-mode-ui="enabled: true">
 
-  <!-- Luz simples -->
-  <a-entity light="type: ambient; color: #FFF"></a-entity>
+        <!-- Câmera / Look -->
+        <a-entity id="rig" position="0 1.6 0">
+            <a-entity id="camera" camera look-controls></a-entity>
+        </a-entity>
 
-  <!-- Hexágono de painéis (3m x 4m) -->
-  <a-plane id="panel-0" position="0 1.6 -4" rotation="0 0 0" width="3" height="4" material="color: black"></a-plane>
-  <a-plane id="panel-1" position="3.464 1.6 -2" rotation="0 -60 0" width="3" height="4" material="color: black"></a-plane>
-  <a-plane id="panel-2" position="3.464 1.6 2" rotation="0 -120 0" width="3" height="4" material="color: black"></a-plane>
-  <a-plane id="panel-3" position="0 1.6 4" rotation="0 180 0" width="3" height="4" material="color: black"></a-plane>
-  <a-plane id="panel-4" position="-3.464 1.6 2" rotation="0 120 0" width="3" height="4" material="color: black"></a-plane>
-  <a-plane id="panel-5" position="-3.464 1.6 -2" rotation="0 60 0" width="3" height="4" material="color: black"></a-plane>
+        <!-- PLANOS COM TEXTURA REAL DE CADA <video> -->
+        <a-plane id="panel-0" position="0 1.6 -3" rotation="0 0 0" width="3.4" height="4"
+                material="shader: flat; transparent: true; opacity: 0"></a-plane>
 
-</a-scene>
+        <a-plane id="panel-1" position="2.598 1.6 -1.5" rotation="0 -60 0" width="3.4" height="4"
+                material="shader: flat; transparent: true; opacity: 0"></a-plane>
 
-<!-- Scripts -->
-<script src="videos.js"></script>
+        <a-plane id="panel-2" position="2.598 1.6 1.5" rotation="0 -120 0" width="3.4" height="4"
+                material="shader: flat; transparent: true; opacity: 0"></a-plane>
 
-<!-- HACK DE AUTOPLAY — obrigatório no Chrome/VR -->
-<script>
-window.addEventListener("click", () => {
-  if (!window.VR360 || !VR360.panelVideos) return;
+        <a-plane id="panel-3" position="0 1.6 3" rotation="0 180 0" width="3.4" height="4"
+                material="shader: flat; transparent: true; opacity: 0"></a-plane>
 
-  console.log("🔧 Desbloqueando autoplay…");
+        <a-plane id="panel-4" position="-2.598 1.6 1.5" rotation="0 120 0" width="3.4" height="4"
+                material="shader: flat; transparent: true; opacity: 0"></a-plane>
 
-  VR360.panelVideos.forEach(v => {
-    if (!v) return;
-    v.muted = true;
-    v.play().then(() => {
-      console.log("🎬 Vídeo tocando após clique:", v.id);
-    }).catch(err => {
-      console.warn("⚠️ Não conseguiu tocar após clique:", v.id, err);
-    });
-  });
-});
-</script>
+        <a-plane id="panel-5" position="-2.598 1.6 -1.5" rotation="0 60 0" width="3.4" height="4"
+                material="shader: flat; transparent: true; opacity: 0"></a-plane>
 
+        <a-entity light="type: ambient; color: #ffffff"></a-entity>
+    </a-scene>
+
+    <script src="videos.js"></script>
 </body>
 </html>
