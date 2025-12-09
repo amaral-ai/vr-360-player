@@ -2,144 +2,59 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>VR 360 Video Player - Hex Ring</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>VR 360 Video Player</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Estilos básicos -->
   <link rel="stylesheet" href="style.css" />
 
-  <!-- A-Frame (WebXR/WebGL) -->
+  <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-  <!-- Lógica de VR + componentes A-Frame -->
+  <!-- VR controls + Components -->
   <script src="vr.js" defer></script>
 
-  <!-- Lógica de seleção de pasta e vídeos -->
+  <!-- Video Manager -->
   <script src="videos.js" defer></script>
 </head>
+
 <body>
-  <!-- UI fixa por cima da cena -->
+
+  <!-- UI Overlay -->
   <div id="ui">
-    <div class="controls-row">
-      <label id="folderLabel" class="btn" for="folderInput">
-        Selecionar pasta de vídeos
-      </label>
-      <input
-        id="folderInput"
-        type="file"
-        webkitdirectory
-        multiple
-        accept="video/*"
-        style="display: none"
-      />
+    <label id="folderLabel" class="btn" for="folderInput">Selecionar pasta</label>
+    <input id="folderInput" type="file" webkitdirectory multiple accept="video/*" hidden>
 
-      <button id="playPauseBtn" class="btn" disabled>Play</button>
+    <button id="playPauseBtn" class="btn" disabled>Play</button>
+    <button id="zoomInBtn" class="btn">Zoom +</button>
+    <button id="zoomOutBtn" class="btn">Zoom -</button>
+    <button id="reloadBtn" class="btn" disabled>Recarregar</button>
 
-      <button id="zoomInBtn" class="btn">Zoom +</button>
-      <button id="zoomOutBtn" class="btn">Zoom -</button>
-
-      <button id="reloadBtn" class="btn" disabled>Recarregar pasta</button>
-    </div>
-    <div id="status">Nenhuma pasta selecionada ainda.</div>
+    <div id="status">Nenhuma pasta selecionada.</div>
   </div>
 
-  <!-- CENA VR -->
-  <a-scene
-    vr-mode-ui="enabled: true"
-    embedded
-  >
-    <!-- Assets de vídeo (fontes de textura) -->
-    <a-assets>
-      <!--
-        Cada <video> será preenchido dinamicamente pelo videos.js
-        object-fit: cover é controlado via CSS.
-      -->
-      <video id="panel-video-0" class="vr-panel-video" playsinline webkit-playsinline crossorigin="anonymous" muted></video>
-      <video id="panel-video-1" class="vr-panel-video" playsinline webkit-playsinline crossorigin="anonymous" muted></video>
-      <video id="panel-video-2" class="vr-panel-video" playsinline webkit-playsinline crossorigin="anonymous" muted></video>
-      <video id="panel-video-3" class="vr-panel-video" playsinline webkit-playsinline crossorigin="anonymous" muted></video>
-      <video id="panel-video-4" class="vr-panel-video" playsinline webkit-playsinline crossorigin="anonymous" muted></video>
-      <video id="panel-video-5" class="vr-panel-video" playsinline webkit-playsinline crossorigin="anonymous" muted></video>
-    </a-assets>
+  <!-- Cena VR -->
+  <a-scene embedded vr-mode-ui="enabled: true">
+    <a-assets id="assets"></a-assets>
 
-    <!-- Rig + câmera (com giroscópio e zoom) -->
     <a-entity id="rig" position="0 1.6 0">
-      <a-entity
-        id="camera"
-        camera="fov: 80"
-        look-controls="pointerLockEnabled: false"
-        wasd-controls="enabled: false"
-        vr-zoom-controls
-        audio-focus-manager
-      >
+      <a-entity id="camera"
+                camera="fov: 80"
+                look-controls
+                vr-zoom-controls
+                audio-focus-manager>
       </a-entity>
     </a-entity>
 
-    <!-- 6 painéis formando um anel hexagonal ao redor do usuário -->
+    <!-- 6 Painéis (sem vídeo por enquanto) -->
+    <a-plane id="panel-0" position="0 1.6 -4" rotation="0 0 0" width="3" height="4"></a-plane>
+    <a-plane id="panel-1" position="3.464 1.6 -2" rotation="0 -60 0" width="3" height="4"></a-plane>
+    <a-plane id="panel-2" position="3.464 1.6 2" rotation="0 -120 0" width="3" height="4"></a-plane>
+    <a-plane id="panel-3" position="0 1.6 4" rotation="0 180 0" width="3" height="4"></a-plane>
+    <a-plane id="panel-4" position="-3.464 1.6 2" rotation="0 120 0" width="3" height="4"></a-plane>
+    <a-plane id="panel-5" position="-3.464 1.6 -2" rotation="0 60 0" width="3" height="4"></a-plane>
 
-    <!-- Painel 0 - à frente -->
-    <a-plane
-      id="panel-entity-0"
-      position="0 1.6 -4"
-      rotation="0 0 0"
-      width="3"
-      height="4"
-      material="shader: flat; src: #panel-video-0"
-    ></a-plane>
-
-    <!-- Painel 1 -->
-    <a-plane
-      id="panel-entity-1"
-      position="3.464 1.6 -2"
-      rotation="0 -60 0"
-      width="3"
-      height="4"
-      material="shader: flat; src: #panel-video-1"
-    ></a-plane>
-
-    <!-- Painel 2 -->
-    <a-plane
-      id="panel-entity-2"
-      position="3.464 1.6 2"
-      rotation="0 -120 0"
-      width="3"
-      height="4"
-      material="shader: flat; src: #panel-video-2"
-    ></a-plane>
-
-    <!-- Painel 3 - atrás -->
-    <a-plane
-      id="panel-entity-3"
-      position="0 1.6 4"
-      rotation="0 -180 0"
-      width="3"
-      height="4"
-      material="shader: flat; src: #panel-video-3"
-    ></a-plane>
-
-    <!-- Painel 4 -->
-    <a-plane
-      id="panel-entity-4"
-      position="-3.464 1.6 2"
-      rotation="0 -240 0"
-      width="3"
-      height="4"
-      material="shader: flat; src: #panel-video-4"
-    ></a-plane>
-
-    <!-- Painel 5 -->
-    <a-plane
-      id="panel-entity-5"
-      position="-3.464 1.6 -2"
-      rotation="0 -300 0"
-      width="3"
-      height="4"
-      material="shader: flat; src: #panel-video-5"
-    ></a-plane>
-
-    <!-- Ambiente simples -->
-    <a-sky color="#000000"></a-sky>
-    <a-entity light="type: ambient; intensity: 1"></a-entity>
+    <a-sky color="#000"></a-sky>
   </a-scene>
+
 </body>
 </html>

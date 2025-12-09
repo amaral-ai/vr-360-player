@@ -1,144 +1,142 @@
-// =========================
-// vr.js
-// =========================
-/**
- * - Controle de áudio: apenas o painel mais central à visão reproduz som.
- * - Zoom vertical (ajuste de FOV da câmera).
- * - Integração com giroscópio: usa rotação da câmera A-Frame.
- * - Modo VR é fornecido pelo próprio A-Frame (WebXR).
- */
-
+// ======================================================
+// VIDEO MANAGER (dinâmico, sem erros WebGL)
+// ======================================================
 (function () {
+
   const VR360 = (window.VR360 = window.VR360 || {});
-  const PANEL_COUNT = 6;
 
-  // Guarda referência à câmera
-  let cameraEl = null;
-  function getCameraEl() {
-    if (!cameraEl) {
-      cameraEl = document.querySelector("#camera");
-    }
-    return cameraEl;
-  }
-
-  // =========================
-  // Componente A-Frame: audio-focus-manager
-  // =========================
-  AFRAME.registerComponent("audio-focus-manager", {
-    init: function () {
-      this.cameraEl = getCameraEl();
-      // Ângulos centrais correspondentes a cada painel (0,60,...,300 graus)
-      this.panelAngles = [0, 60, 120, 180, 240, 300];
-      this.currentPanelIndex = null;
-      this.panelVideos = VR360.panelVideos || [];
-
-      // Por padrão, todos mute (somente o mais central será desmutado)
-      this.panelVideos.forEach((v) => {
-        if (v) v.muted = true;
-      });
-    },
-
-    tick: function () {
-      if (!this.cameraEl || !this.panelVideos.length) return;
-
-      const rot = this.cameraEl.getAttribute("rotation");
-      if (!rot) return;
-
-      let yaw = rot.y || 0; // graus
-      // Normaliza 0–360
-      yaw = ((yaw % 360) + 360) % 360;
-
-      // Descobre o painel cujo ângulo central é o mais próximo
-      let bestIndex = 0;
-      let bestDiff = 999;
-
-      for (let i = 0; i < this.panelAngles.length; i++) {
-        const panelAngle = this.panelAngles[i];
-
-        // Distância angular mínima (modo 360)
-        let diff = ((yaw - panelAngle + 540) % 360) - 180;
-        diff = Math.abs(diff);
-
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          bestIndex = i;
-        }
-      }
-
-      if (bestIndex !== this.currentPanelIndex) {
-        this.currentPanelIndex = bestIndex;
-        this.updateAudioFocus();
-      }
-    },
-
-    updateAudioFocus: function () {
-      const state = VR360.state || { isPlaying: false };
-
-      this.panelVideos = VR360.panelVideos || [];
-      this.panelVideos.forEach((videoEl, idx) => {
-        if (!videoEl) return;
-
-        // Som apenas no painel mais central
-        videoEl.muted = idx !== this.currentPanelIndex;
-
-        // Garante que o vídeo central esteja tocando se o global estiver em "Play"
-        if (idx === this.currentPanelIndex && state.isPlaying && videoEl.paused) {
-          videoEl
-            .play()
-            .catch((err) =>
-              console.warn("Erro ao tocar vídeo do painel central:", err)
-            );
-        }
-      });
-    },
-  });
-
-  // =========================
-  // Componente A-Frame: vr-zoom-controls
-  // =========================
-  AFRAME.registerComponent("vr-zoom-controls", {
-    init: function () {
-      this.cameraEl = getCameraEl();
-      this.minFov = 40; // mais "zoom in"
-      this.maxFov = 100; // mais "zoom out"
-      this.currentFov = 80;
-
-      const zoomInBtn = document.getElementById("zoomInBtn");
-      const zoomOutBtn = document.getElementById("zoomOutBtn");
-
-      if (zoomInBtn) {
-        zoomInBtn.addEventListener("click", () => {
-          this.adjustFov(-5);
-        });
-      }
-
-      if (zoomOutBtn) {
-        zoomOutBtn.addEventListener("click", () => {
-          this.adjustFov(5);
-        });
-      }
-    },
-
-    adjustFov: function (delta) {
-      if (!this.cameraEl) return;
-
-      this.currentFov = this.currentFov + delta;
-      if (this.currentFov < this.minFov) this.currentFov = this.minFov;
-      if (this.currentFov > this.maxFov) this.currentFov = this.maxFov;
-
-      this.cameraEl.setAttribute("camera", "fov", this.currentFov);
-    },
-  });
-
-  // =========================
-  // Helper opcional: entrar no modo VR via código
-  // =========================
-  VR360.enterVR = function () {
-    const scene = document.querySelector("a-scene");
-    if (scene && scene.enterVR) {
-      scene.enterVR();
-    }
+  const state = {
+    files: [],
+    isPlaying: false,
+    currentIndex: [null, null, null, null, null, null]
   };
 
-  window.VR360 = VR360;
+  VR360.state = state;
+
+  const folderInput = document.querySelector("#folderInput");
+  const playPauseBtn = document.querySelector("#playPauseBtn");
+  const reloadBtn = document.querySelector("#reloadBtn");
+  const statusEl = document.querySelector("#status");
+
+  const assets = document.querySelector("#assets");
+
+  const planes = Array.from({ length: 6 }, (_, i) =>
+    document.querySelector(`#panel-${i}`)
+  );
+
+  VR360.panelVideos = [];
+
+  // ------------------------------------------------------
+  // UTIL: texto de status
+  // ------------------------------------------------------
+  function setStatus(msg) {
+    if (statusEl) statusEl.textContent = msg;
+  }
+
+  // ------------------------------------------------------
+  // UTIL: vídeo aleatório
+  // ------------------------------------------------------
+  function randomFile() {
+    return state.files[Math.floor(Math.random() * state.files.length)];
+  }
+
+  // ------------------------------------------------------
+  // Cria o elemento <video> dinamicamente
+  // ------------------------------------------------------
+  function createVideoElement(id) {
+    const v = document.createElement("video");
+    v.id = id;
+    v.className = "vr-video hidden-video";
+    v.setAttribute("playsinline", "");
+    v.setAttribute("webkit-playsinline", "");
+    v.muted = true;
+    v.preload = "auto";
+    assets.appendChild(v);
+    return v;
+  }
+
+  // ------------------------------------------------------
+  // Associa vídeo a um painel
+  // ------------------------------------------------------
+  function loadRandomVideoInto(panelIndex) {
+    const file = randomFile();
+    if (!file) return;
+
+    const vid = VR360.panelVideos[panelIndex];
+    if (!vid) return;
+
+    if (vid.dataset.url) {
+      URL.revokeObjectURL(vid.dataset.url);
+    }
+
+    const url = URL.createObjectURL(file);
+
+    vid.src = url;
+    vid.dataset.url = url;
+    vid.load();
+
+    planes[panelIndex].setAttribute("material", "src", `#${vid.id}`);
+
+    if (state.isPlaying) vid.play();
+  }
+
+  // ------------------------------------------------------
+  // Inicializa os vídeos depois de selecionar a pasta
+  // ------------------------------------------------------
+  function initializePanels() {
+
+    // Criar 6 vídeos novos
+    VR360.panelVideos = [];
+
+    for (let i = 0; i < 6; i++) {
+      let vid = createVideoElement(`panel-video-${i}`);
+      VR360.panelVideos.push(vid);
+
+      vid.onended = () => loadRandomVideoInto(i);
+    }
+
+    for (let i = 0; i < 6; i++) {
+      loadRandomVideoInto(i);
+    }
+
+    setStatus("Vídeos carregados.");
+    playPauseBtn.disabled = false;
+    reloadBtn.disabled = false;
+  }
+
+  // ------------------------------------------------------
+  // Play / Pause global
+  // ------------------------------------------------------
+  function togglePlayPause() {
+    state.isPlaying = !state.isPlaying;
+
+    VR360.panelVideos.forEach(v => {
+      if (!v) return;
+      if (state.isPlaying) v.play();
+      else v.pause();
+    });
+
+    playPauseBtn.textContent = state.isPlaying ? "Pause" : "Play";
+  }
+
+  // ------------------------------------------------------
+  // Seleção da pasta
+  // ------------------------------------------------------
+  folderInput.onchange = () => {
+    const list = Array.from(folderInput.files).filter(f => f.type.startsWith("video"));
+
+    if (!list.length) {
+      setStatus("Pasta sem vídeos.");
+      return;
+    }
+
+    state.files = list;
+    setStatus("Carregando vídeos...");
+
+    initializePanels();
+  };
+
+  playPauseBtn.onclick = togglePlayPause;
+  reloadBtn.onclick = initializePanels;
+
 })();
