@@ -2,59 +2,89 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>VR 360 Video Player</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <link rel="stylesheet" href="style.css" />
+  <title>VR 360 Player</title>
 
   <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
-  <!-- VR controls + Components -->
-  <script src="vr.js" defer></script>
-
-  <!-- Video Manager -->
-  <script src="videos.js" defer></script>
+  <!-- CSS simples -->
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: white;
+    }
+    #ui {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 9999;
+      background: rgba(0,0,0,0.4);
+      padding: 12px;
+      border-radius: 6px;
+    }
+    .hidden-video {
+      display: none;
+    }
+  </style>
 </head>
-
 <body>
 
-  <!-- UI Overlay -->
-  <div id="ui">
-    <label id="folderLabel" class="btn" for="folderInput">Selecionar pasta</label>
-    <input id="folderInput" type="file" webkitdirectory multiple accept="video/*" hidden>
-
-    <button id="playPauseBtn" class="btn" disabled>Play</button>
-    <button id="zoomInBtn" class="btn">Zoom +</button>
-    <button id="zoomOutBtn" class="btn">Zoom -</button>
-    <button id="reloadBtn" class="btn" disabled>Recarregar</button>
-
-    <div id="status">Nenhuma pasta selecionada.</div>
+<div id="ui">
+  <div>
+    <label>Selecionar pasta de vídeos:</label>
+    <input type="file" id="folderInput" webkitdirectory multiple />
   </div>
+  <div style="margin-top:10px;">
+    <button id="playPauseBtn" disabled>Play</button>
+    <button id="reloadBtn" disabled>Recarregar</button>
+  </div>
+  <div id="status" style="margin-top:10px;">Nenhuma pasta selecionada.</div>
+</div>
 
-  <!-- Cena VR -->
-  <a-scene embedded vr-mode-ui="enabled: true">
-    <a-assets id="assets"></a-assets>
+<!-- Cena VR -->
+<a-scene vr-mode-ui="enabled: true" device-orientation-permission-ui="enabled: true">
 
-    <a-entity id="rig" position="0 1.6 0">
-      <a-entity id="camera"
-                camera="fov: 80"
-                look-controls
-                vr-zoom-controls
-                audio-focus-manager>
-      </a-entity>
-    </a-entity>
+  <a-assets id="assets"></a-assets>
 
-    <!-- 6 Painéis (sem vídeo por enquanto) -->
-	<a-plane id="panel-0" position="0 1.6 -4" rotation="0 0 0" width="3" height="4" material="color: black"></a-plane>
-	<a-plane id="panel-1" position="3.464 1.6 -2" rotation="0 -60 0" width="3" height="4" material="color: black"></a-plane>
-	<a-plane id="panel-2" position="3.464 1.6 2" rotation="0 -120 0" width="3" height="4" material="color: black"></a-plane>
-	<a-plane id="panel-3" position="0 1.6 4" rotation="0 180 0" width="3" height="4" material="color: black"></a-plane>
-	<a-plane id="panel-4" position="-3.464 1.6 2" rotation="0 120 0" width="3" height="4" material="color: black"></a-plane>
-	<a-plane id="panel-5" position="-3.464 1.6 -2" rotation="0 60 0" width="3" height="4" material="color: black"></a-plane>
+  <!-- Câmera -->
+  <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
 
-    <a-sky color="#000"></a-sky>
-  </a-scene>
+  <!-- Luz simples -->
+  <a-entity light="type: ambient; color: #FFF"></a-entity>
+
+  <!-- Hexágono de painéis (3m x 4m) -->
+  <a-plane id="panel-0" position="0 1.6 -4" rotation="0 0 0" width="3" height="4" material="color: black"></a-plane>
+  <a-plane id="panel-1" position="3.464 1.6 -2" rotation="0 -60 0" width="3" height="4" material="color: black"></a-plane>
+  <a-plane id="panel-2" position="3.464 1.6 2" rotation="0 -120 0" width="3" height="4" material="color: black"></a-plane>
+  <a-plane id="panel-3" position="0 1.6 4" rotation="0 180 0" width="3" height="4" material="color: black"></a-plane>
+  <a-plane id="panel-4" position="-3.464 1.6 2" rotation="0 120 0" width="3" height="4" material="color: black"></a-plane>
+  <a-plane id="panel-5" position="-3.464 1.6 -2" rotation="0 60 0" width="3" height="4" material="color: black"></a-plane>
+
+</a-scene>
+
+<!-- Scripts -->
+<script src="videos.js"></script>
+
+<!-- HACK DE AUTOPLAY — obrigatório no Chrome/VR -->
+<script>
+window.addEventListener("click", () => {
+  if (!window.VR360 || !VR360.panelVideos) return;
+
+  console.log("🔧 Desbloqueando autoplay…");
+
+  VR360.panelVideos.forEach(v => {
+    if (!v) return;
+    v.muted = true;
+    v.play().then(() => {
+      console.log("🎬 Vídeo tocando após clique:", v.id);
+    }).catch(err => {
+      console.warn("⚠️ Não conseguiu tocar após clique:", v.id, err);
+    });
+  });
+});
+</script>
 
 </body>
 </html>
